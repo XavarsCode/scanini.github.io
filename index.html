@@ -3,49 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panini WC26 Live Scanner</title>
+    <title>Scanner Panini Live WC26</title>
     <script src="https://docs.opencv.org/4.x/opencv.js" type="text/javascript"></script>
     <style>
-        body { font-family: 'Segoe UI', Arial, sans-serif; text-align: center; background: #0a0a0a; color: white; margin: 0; padding: 10px; }
-        .header { background: #e21b22; padding: 12px; font-weight: bold; font-size: 18px; border-radius: 0 0 12px 12px; margin-bottom: 10px; }
-        .camera-container { position: relative; width: 100%; max-width: 400px; height: 300px; margin: auto; border-radius: 12px; overflow: hidden; border: 2px solid #333; background: #000; }
+        body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-align: center; background: #0a0a0a; color: white; margin: 0; padding: 10px; overflow-x: hidden; }
+        .header { background: #e21b22; padding: 15px; font-weight: bold; font-size: 19px; border-radius: 0 0 15px 15px; margin-bottom: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
         
-        /* Vidéo cachée, on affiche le canvas OpenCV redessiné par-dessus */
+        .camera-container { position: relative; width: 100%; max-width: 420px; height: 320px; margin: auto; border-radius: 15px; overflow: hidden; border: 3px solid #333; background: #000; box-shadow: 0 0 20px rgba(0,255,0,0.1); }
+        
+        /* Vidéo masquée, le canvas OpenCV est dessiné par-dessus */
         video { display: none; }
         canvas { width: 100%; height: 100%; object-fit: cover; }
         
-        .laser { position: absolute; top: 0; left: 0; width: 100%; height: 3px; background: #00ff00; box-shadow: 0 0 10px #00ff00; animation: scan 2.5s linear infinite; }
-        @keyframes scan { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
+        /* Ligne laser animée */
+        .laser { position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: linear-gradient(to bottom, rgba(0,255,0,0), rgba(0,255,0,1)); box-shadow: 0 0 15px #00ff00; animation: scanning 2.5s linear infinite; display: none; z-index: 10; }
+        @keyframes scanning { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
         
-        .btn-zone { margin: 15px 0; display: flex; flex-direction: column; gap: 10px; align-items: center; }
-        .btn { background: #00ff00; color: black; padding: 12px 24px; border: none; border-radius: 25px; font-size: 16px; font-weight: bold; cursor: pointer; width: 85%; max-width: 300px; }
-        .btn-csv { background: #007bff; color: white; display: none; }
+        /* Coins de cadrage (visuels) */
+        .corner { position: absolute; width: 25px; height: 25px; border: 4px solid #00ff00; z-index: 5; opacity: 0.6; }
+        .top-left { top: 15px; left: 15px; border-right: none; border-bottom: none; }
+        .top-right { top: 15px; right: 15px; border-left: none; border-bottom: none; }
+        .bottom-left { bottom: 15px; left: 15px; border-right: none; border-top: none; }
+        .bottom-right { bottom: 15px; right: 15px; border-left: none; border-top: none; }
+
+        .btn-zone { margin: 18px 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+        .btn { background: #00ff00; color: black; padding: 14px 28px; border: none; border-radius: 30px; font-size: 17px; font-weight: bold; cursor: pointer; width: 85%; max-width: 320px; box-shadow: 0 4px 10px rgba(0,255,0,0.3); transition: transform 0.1s; }
+        .btn:active { transform: scale(0.97); }
+        .btn:disabled { background: #555; color: #aaa; cursor: not-allowed; box-shadow: none; }
+        .btn-csv { background: #007bff; color: white; display: none; box-shadow: 0 4px 10px rgba(0,123,255,0.3); }
         
-        .result-box { background: #151515; padding: 15px; border-radius: 12px; border: 1px solid #222; text-align: left; max-width: 380px; margin: auto; }
-        .missing-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
-        .missing-item { background: rgba(226, 27, 34, 0.15); color: #ff4d4d; border: 1px solid #e21b22; padding: 4px 10px; border-radius: 6px; font-weight: bold; font-size: 13px; }
-        #loading-opencv { color: #ffcc00; font-weight: bold; margin-bottom: 10px; }
+        .result-box { background: #151515; padding: 18px; border-radius: 15px; border: 1px solid #222; text-align: left; max-width: 400px; margin: auto; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
+        .status-line { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .nation-badge { background: #333; padding: 6px 12px; border-radius: 8px; font-size: 14px; color: #eee; border: 1px solid #444; font-weight: bold; }
+        .missing-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .missing-item { background: rgba(226, 27, 34, 0.2); color: #ff4d4d; border: 1px solid #e21b22; padding: 6px 12px; border-radius: 8px; font-weight: bold; font-size: 14px; animation: popIn 0.3s ease; }
+        
+        @keyframes popIn { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+        #loading-opencv { color: #ffcc00; font-weight: bold; margin-bottom: 15px; font-size: 15px; }
     </style>
 </head>
 <body>
 
-<div class="header">PANINI WC26 - LIVE SCANNER</div>
-<div id="loading-opencv">⏳ Chargement de l'intelligence artificielle (OpenCV)...</div>
+<div class="header">PANINI live SCANNER • wc26</div>
+<div id="loading-opencv">⏳ Initialisation de l'IA (OpenCV)...</div>
 
 <div class="camera-container">
     <video id="video" playsinline autoplay></video>
     <canvas id="canvasOutput"></canvas>
-    <div class="laser"></div>
+    
+    <div class="laser" id="laser"></div>
+    <div class="corner top-left"></div>
+    <div class="corner top-right"></div>
+    <div class="corner bottom-left"></div>
+    <div class="corner bottom-right"></div>
 </div>
 
 <div class="btn-zone">
-    <button class="btn" id="start-btn" disabled>▶️ OUVRIR LE SCANNER</button>
+    <button class="btn" id="start-btn" disabled>▶️ LANCER LE SCANNER LIVE</button>
     <button class="btn btn-csv" id="csv-btn">📥 EXPORTER LES MANQUANTS (.CSV)</button>
 </div>
 
 <div class="result-box">
-    <h3 style="margin: 0; font-size: 15px; color: #00ff00;">📡 Statut : <span id="status" style="color:white;">En attente de l'IA</span></h3>
-    <p style="margin: 10px 0 5px 0; font-size: 13px; color: #888;">Numéros manquants détectés en direct (Changer de page pour mettre à jour) :</p>
+    <div class="status-line">
+        <h3 style="margin: 0; font-size: 17px; color: #00ff00;">📡 Statut : <span id="status" style="color:white;">En attente</span></h3>
+        <span class="nation-badge" id="nation-name">PAYS : ???</span>
+    </div>
+    <hr style="border: 0; border-top: 1px solid #222;">
+    <p style="margin: 12px 0 6px 0; font-size: 14px; color: #aaa;">Cartes manquantes détectées (Tournez les pages pour mettre à jour) :</p>
     <div id="missing-numbers" class="missing-list"></div>
 </div>
 
@@ -57,141 +81,194 @@
     const canvasHidden = document.getElementById('canvasHidden');
     const startBtn = document.getElementById('start-btn');
     const csvBtn = document.getElementById('csv-btn');
+    const laser = document.getElementById('laser');
     const statusText = document.getElementById('status');
+    const nationBadge = document.getElementById('nation-name');
     const missingDiv = document.getElementById('missing-numbers');
     const loadingText = document.getElementById('loading-opencv');
 
     let ctxHidden = canvasHidden.getContext('2d');
-    let listeManquantsGlobale = new Set();
+    
+    // Structure pour stocker les manquants par pays
+    let dbManquants = {}; 
+    let paysActuel = "MAR"; // Par défaut sur le Maroc basé sur ton exemple
+    
     let src, gray, threshold_output, contours, hierarchy;
     let streaming = false;
 
-    // Vérifier si OpenCV est prêt
+    // 1. Vérifier si OpenCV est prêt
     cv['onRuntimeInitialized'] = () => {
         loadingText.style.display = 'none';
         startBtn.removeAttribute('disabled');
-        statusText.innerText = "Prêt à démarrer";
+        statusText.innerText = "Prêt";
     };
 
-    // Démarrer la caméra
+    // 2. Démarrer la caméra
     startBtn.addEventListener('click', async () => {
         try {
+            // Demande la caméra arrière avec une résolution standard pour la fluidité
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment", width: 640, height: 480 }, 
+                video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } }, 
                 audio: false 
             });
             video.srcObject = stream;
             video.play();
             streaming = true;
-            startBtn.style.display = 'none';
-            statusText.innerText = "Scan en direct actif";
             
-            // Initialisation des éléments OpenCV une fois la vidéo lancée
+            // Interface
+            startBtn.style.display = 'none';
+            laser.style.display = 'block';
+            statusText.innerText = "Scan en cours...";
+            nationBadge.innerText = "PAYS : MAROC (MAR)";
+            nationBadge.style.background = "#006233"; // Vert Maroc
+
+            // Initialisation OpenCV après un court délai pour laisser la vidéo se charger
             setTimeout(() => {
+                // Aligner la taille des canvas sur la vidéo réelle
                 canvasOutput.width = video.videoWidth;
                 canvasOutput.height = video.videoHeight;
                 canvasHidden.width = video.videoWidth;
                 canvasHidden.height = video.videoHeight;
                 
+                // Allocation de la mémoire OpenCV (Mat)
                 src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
                 gray = new cv.Mat();
                 threshold_output = new cv.Mat();
                 contours = new cv.MatVector();
                 hierarchy = new cv.Mat();
                 
-                // Lancement de la boucle de traitement d'image
+                // Lancer la boucle de traitement d'image
                 requestAnimationFrame(processVideo);
             }, 1000);
         } catch (err) {
-            alert("Erreur d'accès à la caméra arrière.");
+            alert("Impossible d'accéder à la caméra arrière. Vérifie les permissions HTTPS.");
             console.error(err);
         }
     });
 
-    // Boucle de détection en temps réel (S'exécute à chaque changement d'image)
+    // 3. Boucle de détection en temps réel (Le Cœur de l'IA)
     function processVideo() {
         if (!streaming) return;
 
-        // 1. Capturer l'image de la vidéo sur le canvas masqué
+        // a. Capturer la frame de la vidéo sur le canvas masqué
         ctxHidden.drawImage(video, 0, 0, canvasHidden.width, canvasHidden.height);
         let imgData = ctxHidden.getImageData(0, 0, canvasHidden.width, canvasHidden.height);
         src.data.set(imgData.data);
 
-        // 2. Traitement OpenCV (Gris + Seuillage pour isoler la grille)
+        // b. Traitement OpenCV robuste
         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
-        cv.threshold(gray, threshold_output, 120, 255, cv.THRESH_BINARY_INV);
+        
+        // Flou pour réduire le bruit (texte, détails)
+        let ksize = new cv.Size(5, 5);
+        cv.GaussianBlur(gray, gray, ksize, 0, 0, cv.BORDER_DEFAULT);
+
+        // SEUILLAGE ADAPTATIF : Gère les ombres et la lumière changeante
+        cv.adaptiveThreshold(gray, threshold_output, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+
+        // c. Trouver les contours (les grilles)
         cv.findContours(threshold_output, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE);
 
-        let localMissing = [];
         let finalDisplay = src.clone();
+        let localMissingNums = [];
 
-        // 3. Analyser la forme et la couleur des cases de l'album
+        // d. Analyser chaque contour trouvé
         for (let i = 0; i < contours.size(); ++i) {
             let cnt = contours.get(i);
             let rect = cv.boundingRect(cnt);
             let area = rect.width * rect.height;
 
-            // Détecter si la zone ressemble à un emplacement Panini (ratio carré/rectangle)
-            if (area > 3000 && area < 12000 && rect.width / rect.height > 0.6 && rect.width / rect.height < 1.4) {
+            // Filtre strict : Ne garder que ce qui ressemble à une case Panini à l'écran
+            // (Taille suffisante et ratio proche d'un carré/rectangle debout)
+            if (area > 3500 && area < 20000 && rect.width / rect.height > 0.65 && rect.width / rect.height < 1.35) {
+                
+                // Region of Interest (ROI) : On découpe la case
                 let cellRoi = gray.roi(rect);
                 let mean = new cv.Mat();
                 let stddev = new cv.Mat();
                 cv.meanStdDev(cellRoi, mean, stddev);
                 
+                // Calcul de la variance : uniforme (case vide) vs complexe (sticker collé)
                 let variance = Math.pow(stddev.data64F[0], 2);
 
-                // Analyse de la page (Exemple basé sur l'album du Maroc)
-                // Variance basse = case vide (couleur uniforme unie), Variance haute = Sticker collé
-                if (variance < 25) { 
-                    // CASE VIDE : Rectangle Rouge Épais
+                if (variance < 30) { // Seuil de variance pour une case vide (MAROC)
+                    // CASE MANQUANTE : Rectangle Rouge Épais
                     let p1 = new cv.Point(rect.x, rect.y);
                     let p2 = new cv.Point(rect.x + rect.width, rect.y + rect.height);
-                    cv.rectangle(finalDisplay, p1, p2, [226, 27, 34, 255], 3);
+                    cv.rectangle(finalDisplay, p1, p2, [226, 27, 34, 255], 4);
                     
-                    // Calcul approximatif du numéro selon la position x sur l'écran
+                    // Calcul approximatif du numéro selon la position horizontale (x)
                     let simulatedNum = Math.floor((rect.x / canvasOutput.width) * 19) + 1;
-                    if(!localMissing.includes(simulatedNum)) {
-                        localMissing.push(simulatedNum);
-                        listeManquantsGlobale.add(`MAR ${simulatedNum}`);
+                    
+                    if(!localMissingNums.includes(simulatedNum)) {
+                        localMissingNums.push(simulatedNum);
+                        
+                        // Enregistrer dans la base globale
+                        if (!dbManquants[paysActuel]) dbManquants[paysActuel] = new Set();
+                        dbManquants[paysActuel].add(simulatedNum);
                     }
                 } else {
-                    // CASE PLEINE : Rectangle Vert Fin
+                    // CASE DÉTENUE : Rectangle Vert Fin
                     let p1 = new cv.Point(rect.x, rect.y);
                     let p2 = new cv.Point(rect.x + rect.width, rect.y + rect.height);
-                    cv.rectangle(finalDisplay, p1, p2, [0, 255, 0, 255], 1);
+                    cv.rectangle(finalDisplay, p1, p2, [0, 255, 0, 255], 2);
                 }
+                
+                // Nettoyage mémoire locale
                 cellRoi.delete(); mean.delete(); stddev.delete();
             }
         }
 
-        // Afficher le résultat avec les filtres de couleurs sur l'écran du tel
+        // e. Afficher le résultat final sur le canvas de l'interface
         cv.imshow('canvasOutput', finalDisplay);
         finalDisplay.delete();
 
-        // Mettre à jour la liste des cartes manquantes sur l'interface
-        if(localMissing.length > 0) {
-            missingDiv.innerHTML = "";
-            Array.from(listeManquantsGlobale).sort().forEach(item => {
-                const span = document.createElement('span');
-                span.className = 'missing-item';
-                span.innerText = item;
-                missingDiv.appendChild(span);
-            });
-            csvBtn.style.display = 'block';
+        // f. Mettre à jour la liste visuelle des manquants
+        if (dbManquants[paysActuel] && dbManquants[paysActuel].size > 0) {
+            // Uniquement si on a détecté de nouvelles choses dans cette frame
+            if (localMissingNums.length > 0) {
+                updateVisualList();
+                csvBtn.style.display = 'block';
+            }
         }
 
-        // Relancer la boucle pour la frame vidéo suivante
+        // Relancer la boucle pour la frame suivante (requestAnimationFrame est plus fluide que setInterval)
         requestAnimationFrame(processVideo);
     }
 
-    // Export CSV fonctionnel
-    csvBtn.addEventListener('click', () => {
-        if (listeManquantsGlobale.size === 0) return;
-        let csvContent = "data:text/csv;charset=utf-8,Nation,Numero Manquant\n";
-        Array.from(listeManquantsGlobale).sort().forEach(item => {
-            let parts = item.split(" ");
-            csvContent += `${parts[0]},${parts[1]}\n`;
+    // Mise à jour de l'interface liste
+    function updateVisualList() {
+        if (!dbManquants[paysActuel]) return;
+        
+        missingDiv.innerHTML = "";
+        // Trier les numéros
+        let sortedNums = Array.from(dbManquants[paysActuel]).sort((a, b) => a - b);
+        
+        sortedNums.forEach(num => {
+            const span = document.createElement('span');
+            span.className = 'missing-item';
+            span.innerText = `${paysActuel} ${num}`;
+            missingDiv.appendChild(span);
         });
+    }
+
+    // 4. Export CSV réel
+    csvBtn.addEventListener('click', () => {
+        let totalManquants = 0;
+        Object.keys(dbManquants).forEach(p => totalManquants += dbManquants[p].size);
+        if (totalManquants === 0) return;
+
+        // Construction du contenu CSV
+        let csvContent = "data:text/csv;charset=utf-8,Nation,Numero Manquant\n";
+        
+        // Parcourir tous les pays enregistrés
+        Object.keys(dbManquants).sort().forEach(pays => {
+            let nums = Array.from(dbManquants[pays]).sort((a, b) => a - b);
+            nums.forEach(num => {
+                csvContent += `${pays},${num}\n`;
+            });
+        });
+
+        // Téléchargement du fichier
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
@@ -201,5 +278,6 @@
         document.body.removeChild(link);
     });
 </script>
+
 </body>
 </html>
