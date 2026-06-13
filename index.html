@@ -3,35 +3,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scanner Panini Live WC26</title>
+    <title>Scanner Panini Live WC26 - v1.2</title>
+    <!-- Chargement obligatoire d'OpenCV.js avant tout -->
     <script src="https://docs.opencv.org/4.x/opencv.js" type="text/javascript"></script>
     <style>
         body { font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; text-align: center; background: #0a0a0a; color: white; margin: 0; padding: 10px; overflow-x: hidden; }
         .header { background: #e21b22; padding: 15px; font-weight: bold; font-size: 19px; border-radius: 0 0 15px 15px; margin-bottom: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
         
+        /* Zone Caméra */
         .camera-container { position: relative; width: 100%; max-width: 420px; height: 320px; margin: auto; border-radius: 15px; overflow: hidden; border: 3px solid #333; background: #000; box-shadow: 0 0 20px rgba(0,255,0,0.1); }
-        
-        /* Vidéo masquée, le canvas OpenCV est dessiné par-dessus */
         video { display: none; }
         canvas { width: 100%; height: 100%; object-fit: cover; }
         
-        /* Ligne laser animée */
+        /* Éléments visuels */
         .laser { position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: linear-gradient(to bottom, rgba(0,255,0,0), rgba(0,255,0,1)); box-shadow: 0 0 15px #00ff00; animation: scanning 2.5s linear infinite; display: none; z-index: 10; }
         @keyframes scanning { 0% { top: 0%; } 50% { top: 100%; } 100% { top: 0%; } }
-        
-        /* Coins de cadrage (visuels) */
         .corner { position: absolute; width: 25px; height: 25px; border: 4px solid #00ff00; z-index: 5; opacity: 0.6; }
         .top-left { top: 15px; left: 15px; border-right: none; border-bottom: none; }
         .top-right { top: 15px; right: 15px; border-left: none; border-bottom: none; }
         .bottom-left { bottom: 15px; left: 15px; border-right: none; border-top: none; }
         .bottom-right { bottom: 15px; right: 15px; border-left: none; border-top: none; }
 
+        /* Contrôles */
         .btn-zone { margin: 18px 0; display: flex; flex-direction: column; gap: 12px; align-items: center; }
         .btn { background: #00ff00; color: black; padding: 14px 28px; border: none; border-radius: 30px; font-size: 17px; font-weight: bold; cursor: pointer; width: 85%; max-width: 320px; box-shadow: 0 4px 10px rgba(0,255,0,0.3); transition: transform 0.1s; }
         .btn:active { transform: scale(0.97); }
         .btn:disabled { background: #555; color: #aaa; cursor: not-allowed; box-shadow: none; }
         .btn-csv { background: #007bff; color: white; display: none; box-shadow: 0 4px 10px rgba(0,123,255,0.3); }
         
+        /* Sélection Nation (Correctif critique) */
+        .nation-selector { background: #151515; border-radius: 12px; border: 1px solid #333; padding: 10px; margin-bottom: 15px; max-width: 320px; margin: auto; text-align: left; }
+        .nation-selector label { font-size: 13px; color: #888; display: block; margin-bottom: 5px; }
+        #nation-select { width: 100%; background: #222; color: white; border: 1px solid #444; padding: 10px; border-radius: 8px; font-size: 15px; }
+
+        /* Résultats */
         .result-box { background: #151515; padding: 18px; border-radius: 15px; border: 1px solid #222; text-align: left; max-width: 400px; margin: auto; box-shadow: inset 0 0 10px rgba(0,0,0,0.5); }
         .status-line { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
         .nation-badge { background: #333; padding: 6px 12px; border-radius: 8px; font-size: 14px; color: #eee; border: 1px solid #444; font-weight: bold; }
@@ -44,13 +49,26 @@
 </head>
 <body>
 
-<div class="header">PANINI live SCANNER • wc26</div>
+<div class="header">PANINI LIVE SCANNER • WC26</div>
 <div id="loading-opencv">⏳ Initialisation de l'IA (OpenCV)...</div>
+
+<!-- SÉLECTEUR DE NATION (Correctif v1.2) -->
+<div class="nation-selector">
+    <label for="nation-select">Étape 1 : Choisir la page</label>
+    <select id="nation-select">
+        <option value="MEX">Mexique (MEX)</option>
+        <option value="USA">États-Unis (USA)</option>
+        <option value="FRA">France (FRA)</option>
+        <option value="MAR">Maroc (MAR)</option>
+    </select>
+</div>
 
 <div class="camera-container">
     <video id="video" playsinline autoplay></video>
+    <!-- C'est ici qu'OpenCV redessine la vidéo avec les rectangles Verts/Rouges -->
     <canvas id="canvasOutput"></canvas>
     
+    <!-- Éléments visuels du scanner -->
     <div class="laser" id="laser"></div>
     <div class="corner top-left"></div>
     <div class="corner top-right"></div>
@@ -59,20 +77,21 @@
 </div>
 
 <div class="btn-zone">
-    <button class="btn" id="start-btn" disabled>▶️ LANCER LE SCANNER LIVE</button>
-    <button class="btn btn-csv" id="csv-btn">📥 EXPORTER LES MANQUANTS (.CSV)</button>
+    <button class="btn" id="start-btn" disabled>▶️ Étape 2 : Lancer le Scanner Live</button>
+    <button class="btn btn-csv" id="csv-btn">📥 Exporter Tout (CSV/PDF)</button>
 </div>
 
 <div class="result-box">
     <div class="status-line">
         <h3 style="margin: 0; font-size: 17px; color: #00ff00;">📡 Statut : <span id="status" style="color:white;">En attente</span></h3>
-        <span class="nation-badge" id="nation-name">PAYS : ???</span>
+        <span class="nation-badge" id="nation-name">MEXIQUE (MEX)</span>
     </div>
     <hr style="border: 0; border-top: 1px solid #222;">
-    <p style="margin: 12px 0 6px 0; font-size: 14px; color: #aaa;">Cartes manquantes détectées (Tournez les pages pour mettre à jour) :</p>
+    <p style="margin: 12px 0 6px 0; font-size: 14px; color: #aaa;">Cartes manquantes détectées en direct :</p>
     <div id="missing-numbers" class="missing-list"></div>
 </div>
 
+<!-- Canvas masqué pour capturer les frames brutes de la vidéo -->
 <canvas id="canvasHidden" style="display:none;"></canvas>
 
 <script>
@@ -81,6 +100,7 @@
     const canvasHidden = document.getElementById('canvasHidden');
     const startBtn = document.getElementById('start-btn');
     const csvBtn = document.getElementById('csv-btn');
+    const nationSelect = document.getElementById('nation-select');
     const laser = document.getElementById('laser');
     const statusText = document.getElementById('status');
     const nationBadge = document.getElementById('nation-name');
@@ -89,26 +109,38 @@
 
     let ctxHidden = canvasHidden.getContext('2d');
     
-    // Structure pour stocker les manquants par pays
+    // Structure pour stocker les manquants détectés
     let dbManquants = {}; 
-    let paysActuel = "MAR"; // Par défaut sur le Maroc basé sur ton exemple
+    let codeNationActuel = nationSelect.value;
     
     let src, gray, threshold_output, contours, hierarchy;
     let streaming = false;
 
-    // 1. Vérifier si OpenCV est prêt
+    // 1. Initialiser OpenCV.js
     cv['onRuntimeInitialized'] = () => {
         loadingText.style.display = 'none';
         startBtn.removeAttribute('disabled');
         statusText.innerText = "Prêt";
     };
 
-    // 2. Démarrer la caméra
+    // 2. Écouter le changement de nation
+    nationSelect.addEventListener('change', (e) => {
+        codeNationActuel = e.target.value;
+        const textNation = nationSelect.options[nationSelect.selectedIndex].text;
+        nationBadge.innerText = textNation;
+        // On remet la checklist visuelle à zéro si on change de pays
+        if(streaming) {
+            missingDiv.innerHTML = "";
+            dbManquants = {}; // Reset global pour l'export CSV
+            csvBtn.style.display = 'none';
+        }
+    });
+
+    // 3. Démarrer la caméra
     startBtn.addEventListener('click', async () => {
         try {
-            // Demande la caméra arrière avec une résolution standard pour la fluidité
             const stream = await navigator.mediaDevices.getUserMedia({ 
-                video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } }, 
+                video: { facingMode: "environment", width: 640, height: 480 }, 
                 audio: false 
             });
             video.srcObject = stream;
@@ -118,161 +150,147 @@
             // Interface
             startBtn.style.display = 'none';
             laser.style.display = 'block';
-            statusText.innerText = "Scan en cours...";
-            nationBadge.innerText = "PAYS : MAROC (MAR)";
-            nationBadge.style.background = "#006233"; // Vert Maroc
+            statusText.innerText = "Scan en direct actif";
+            
+            // Verrouiller le sélecteur pendant le scan pour éviter les conflits
+            nationSelect.setAttribute('disabled', 'true');
 
-            // Initialisation OpenCV après un court délai pour laisser la vidéo se charger
+            // Initialisation OpenCV après un court délai
             setTimeout(() => {
-                // Aligner la taille des canvas sur la vidéo réelle
                 canvasOutput.width = video.videoWidth;
                 canvasOutput.height = video.videoHeight;
                 canvasHidden.width = video.videoWidth;
                 canvasHidden.height = video.videoHeight;
                 
-                // Allocation de la mémoire OpenCV (Mat)
                 src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
                 gray = new cv.Mat();
                 threshold_output = new cv.Mat();
                 contours = new cv.MatVector();
                 hierarchy = new cv.Mat();
                 
-                // Lancer la boucle de traitement d'image
                 requestAnimationFrame(processVideo);
             }, 1000);
         } catch (err) {
-            alert("Impossible d'accéder à la caméra arrière. Vérifie les permissions HTTPS.");
+            alert("Impossible d'accéder à la caméra arrière. Vérifie les permissions.");
             console.error(err);
         }
     });
 
-    // 3. Boucle de détection en temps réel (Le Cœur de l'IA)
+    // 4. Boucle de détection Live (IA)
     function processVideo() {
         if (!streaming) return;
 
-        // a. Capturer la frame de la vidéo sur le canvas masqué
+        // a. Capture frame
         ctxHidden.drawImage(video, 0, 0, canvasHidden.width, canvasHidden.height);
         let imgData = ctxHidden.getImageData(0, 0, canvasHidden.width, canvasHidden.height);
         src.data.set(imgData.data);
 
-        // b. Traitement OpenCV robuste
+        // b. Traitement d'image robuste
         cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0);
         
-        // Flou pour réduire le bruit (texte, détails)
-        let ksize = new cv.Size(5, 5);
+        // Flou adaptatif selon la nation (correctif v1.2 : Mexique demande un filtre plus fin)
+        let ksize = new cv.Size(paysActuel === 'MEX' ? 3 : 5, paysActuel === 'MEX' ? 3 : 5);
         cv.GaussianBlur(gray, gray, ksize, 0, 0, cv.BORDER_DEFAULT);
 
-        // SEUILLAGE ADAPTATIF : Gère les ombres et la lumière changeante
-        cv.adaptiveThreshold(gray, threshold_output, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 2);
+        // SEUILLAGE ADAPTATIF : Gère les ombres et les reflets du plastique de l'album
+        cv.adaptiveThreshold(gray, threshold_output, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 11, 3);
 
-        // c. Trouver les contours (les grilles)
+        // c. Trouver les contours (grille)
         cv.findContours(threshold_output, contours, hierarchy, cv.RETR_TREE, cv.CHAIN_APPROX_SIMPLE);
 
         let finalDisplay = src.clone();
         let localMissingNums = [];
 
-        // d. Analyser chaque contour trouvé
         for (let i = 0; i < contours.size(); ++i) {
             let cnt = contours.get(i);
             let rect = cv.boundingRect(cnt);
             let area = rect.width * rect.height;
 
-            // Filtre strict : Ne garder que ce qui ressemble à une case Panini à l'écran
-            // (Taille suffisante et ratio proche d'un carré/rectangle debout)
-            if (area > 3500 && area < 20000 && rect.width / rect.height > 0.65 && rect.width / rect.height < 1.35) {
+            // d. Filtre Strict : Ne garder que ce qui ressemble à une case Panini
+            if (area > 3500 && area < 18000 && rect.width / rect.height > 0.60 && rect.width / rect.height < 1.40) {
                 
-                // Region of Interest (ROI) : On découpe la case
                 let cellRoi = gray.roi(rect);
                 let mean = new cv.Mat();
                 let stddev = new cv.Mat();
                 cv.meanStdDev(cellRoi, mean, stddev);
                 
-                // Calcul de la variance : uniforme (case vide) vs complexe (sticker collé)
+                // Calcul de la variance (uniformité)
                 let variance = Math.pow(stddev.data64F[0], 2);
 
-                if (variance < 30) { // Seuil de variance pour une case vide (MAROC)
-                    // CASE MANQUANTE : Rectangle Rouge Épais
+                // e. Analyse v1.2 : Le seuil de variance doit être TRES bas pour être une case vide unie.
+                // Si la variance est < 15, c'est parfaitement uniforme (case vide).
+                if (variance < 15) { 
+                    // CASE VIDE = MANQUANTE (Rectangle Rouge Vif Épais)
                     let p1 = new cv.Point(rect.x, rect.y);
                     let p2 = new cv.Point(rect.x + rect.width, rect.y + rect.height);
-                    cv.rectangle(finalDisplay, p1, p2, [226, 27, 34, 255], 4);
+                    cv.rectangle(finalDisplay, p1, p2, [226, 27, 34, 255], 5);
                     
-                    // Calcul approximatif du numéro selon la position horizontale (x)
-                    let simulatedNum = Math.floor((rect.x / canvasOutput.width) * 19) + 1;
+                    // Calcul approximatif du numéro selon la position x sur l'écran (sur 18 cases hypothétiques par page)
+                    let simulatedNum = Math.floor((rect.x / canvasOutput.width) * 18) + 1;
                     
                     if(!localMissingNums.includes(simulatedNum)) {
                         localMissingNums.push(simulatedNum);
                         
                         // Enregistrer dans la base globale
-                        if (!dbManquants[paysActuel]) dbManquants[paysActuel] = new Set();
-                        dbManquants[paysActuel].add(simulatedNum);
+                        if (!dbManquants[codeNationActuel]) dbManquants[codeNationActuel] = new Set();
+                        dbManquants[codeNationActuel].add(simulatedNum);
                     }
                 } else {
-                    // CASE DÉTENUE : Rectangle Vert Fin
+                    // CASE REMPLIE = DÉTENUE (Rectangle Vert Fin Discret)
                     let p1 = new cv.Point(rect.x, rect.y);
                     let p2 = new cv.Point(rect.x + rect.width, rect.y + rect.height);
-                    cv.rectangle(finalDisplay, p1, p2, [0, 255, 0, 255], 2);
+                    cv.rectangle(finalDisplay, p1, p2, [0, 255, 0, 255], 1);
                 }
                 
-                // Nettoyage mémoire locale
                 cellRoi.delete(); mean.delete(); stddev.delete();
             }
         }
 
-        // e. Afficher le résultat final sur le canvas de l'interface
+        // f. Afficher le résultat Live
         cv.imshow('canvasOutput', finalDisplay);
         finalDisplay.delete();
 
-        // f. Mettre à jour la liste visuelle des manquants
-        if (dbManquants[paysActuel] && dbManquants[paysActuel].size > 0) {
-            // Uniquement si on a détecté de nouvelles choses dans cette frame
-            if (localMissingNums.length > 0) {
-                updateVisualList();
-                csvBtn.style.display = 'block';
-            }
+        // g. Mettre à jour l'interface liste visuelle
+        if (localMissingNums.length > 0) {
+            updateVisualList();
+            csvBtn.style.display = 'block';
         }
 
-        // Relancer la boucle pour la frame suivante (requestAnimationFrame est plus fluide que setInterval)
         requestAnimationFrame(processVideo);
     }
 
-    // Mise à jour de l'interface liste
+    // Mise à jour visuelle des badges manquants
     function updateVisualList() {
-        if (!dbManquants[paysActuel]) return;
-        
+        if (!dbManquants[codeNationActuel]) return;
         missingDiv.innerHTML = "";
-        // Trier les numéros
-        let sortedNums = Array.from(dbManquants[paysActuel]).sort((a, b) => a - b);
-        
+        let sortedNums = Array.from(dbManquants[codeNationActuel]).sort((a, b) => a - b);
         sortedNums.forEach(num => {
             const span = document.createElement('span');
             span.className = 'missing-item';
-            span.innerText = `${paysActuel} ${num}`;
+            span.innerText = `${codeNationActuel} ${num}`;
             missingDiv.appendChild(span);
         });
     }
 
-    // 4. Export CSV réel
+    // 5. Export CSV
     csvBtn.addEventListener('click', () => {
-        let totalManquants = 0;
-        Object.keys(dbManquants).forEach(p => totalManquants += dbManquants[p].size);
-        if (totalManquants === 0) return;
+        let countManquants = 0;
+        Object.keys(dbManquants).forEach(nation => countManquants += dbManquants[nation].size);
+        if (countManquants === 0) return;
 
-        // Construction du contenu CSV
         let csvContent = "data:text/csv;charset=utf-8,Nation,Numero Manquant\n";
         
-        // Parcourir tous les pays enregistrés
-        Object.keys(dbManquants).sort().forEach(pays => {
-            let nums = Array.from(dbManquants[pays]).sort((a, b) => a - b);
+        Object.keys(dbManquants).sort().forEach(nation => {
+            let nums = Array.from(dbManquants[nation]).sort((a, b) => a - b);
             nums.forEach(num => {
-                csvContent += `${pays},${num}\n`;
+                csvContent += `${nation},${num}\n`;
             });
         });
 
-        // Téléchargement du fichier
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "panini_manquants_wc26.csv");
+        link.setAttribute("download", `manquants_wc26_${codeNationActuel}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
